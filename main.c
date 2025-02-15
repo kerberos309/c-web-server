@@ -1,24 +1,79 @@
+#include <arpa/inet.h>
+#include <ctype.h>
+#include <unistd.h>
+#include <sqlite3.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
-#include <arpa/inet.h>
-/*
-TODO:
-1. CREATE CONFIG FILE.
-2. RETRIEVE LIST OF PATH FOR REGISTERED API.
-3. IF THE PATH IS NOT ON LIST OF REGISTERED API, RETURN 404 ERROR.
-*/
+
 #define PORT 55000
-char **endpointsAndMethods;
+char **global_endpointsAndMethods;
+int global_EndpointsAndMethodsCounter = 0;
+
+#pragma region PATH VALIDATION
+
+int pathValidation(char *requestPath, char *registeredPath)
+{
+    /*
+    DESCRIPTION:
+    ->TO VALIDATE THE REGISTERED PATH FROM CONFIG FILE AND REQUEST PATH
+    */
+    char *charPosition = strchr(registeredPath, '{');
+    //TODO: IDENTIFY MULTIPLE SLUGS, AND CONFIRM IF IT IS STRING(CHAR[]) OR INT
+    if(charPosition != NULL)
+    {
+        int position = charPosition - registeredPath;
+        printf("position int: %d\n", position);
+        printf("whole path: %s\n", requestPath);
+        printf("value: %c\n", requestPath[position]);
+        if(isdigit(requestPath[position])){
+            printf("Valid\n");
+            return 1;
+        }else{
+            printf("Invalid\n");
+            return 0;
+        }
+    }
+    else
+    {
+        printf("Character not found\n");
+        return 0;
+    }
+} 
+#pragma endregion
+#pragma region STRING DUPLICATE
+char *strdup(const char * s)
+{
+    /*
+    Description
+    ->function to duplicate string(char[])
+    */
+    if (s == NULL) {
+        return NULL; // Handle null input
+    }
+
+    size_t len = strlen(s) + 1; // +1 for the null terminator
+    char *new_s = malloc(len);
+
+    if (new_s == NULL) {
+        return NULL; // Handle memory allocation failure
+    }
+
+    memcpy(new_s, s, len); // Use memcpy for efficiency
+    return new_s;
+}
+#pragma endregion
+#pragma region EXIT SERVER
 void exitServer(int sig)
 {
     //free global variables.
-    free(endpointsAndMethods);
+    free(global_endpointsAndMethods);
     printf("Exiting server...");
     exit(0);
 }
+#pragma endregion
+#pragma region CLEAR ENDPOINTS
 void clearEndpoints(char *str, char ch)
 {
     int i, j = 0;
@@ -31,6 +86,8 @@ void clearEndpoints(char *str, char ch)
     }
     str[j] = '\0';
 }
+#pragma endregion
+#pragma region LOAD CONFIG
 void loadServer()
 {
     FILE *serverConfigFile = fopen("server.conf", "r");
@@ -77,31 +134,43 @@ void loadServer()
         printf("Memory allocation failed.");
         exit(1);        
     }
-    char *route_value = strtok(path_array, ",");
+    char *route_value = strtok(strdup(path_array), ",");
     int counter = 0;
     while(route_value != NULL)
     {
-        api_endpoints[counter] = malloc(strlen(route_value)+1);
-        strcpy(api_endpoints[counter], route_value);
+        api_endpoints[counter] = strdup(route_value);
+        if(api_endpoints[counter]==NULL)
+        {
+            perror("api_endpoints strdup failed");
+            exit(1);
+        }
         counter++;
         route_value = strtok(NULL,",");
     }
+    //set the total count of endpoints to global variable
+    global_EndpointsAndMethodsCounter = counter;
     //initiate size of "endpoints"
-    endpointsAndMethods = (char **)malloc(endpoints_count * sizeof(char *));
+    global_endpointsAndMethods = (char **)malloc(endpoints_count * sizeof(char *));
+    if(global_endpointsAndMethods == NULL)
+    {
+        perror("global_endpointsAndMethods malloc failed.");
+        exit(1);
+    }
     //display endpoints
     for (int k = 0; k < endpoints_count; k++)
     {
         //clear endpoints
         clearEndpoints(api_endpoints[k], '"');
         //store api endpoints into char[][]
-        endpointsAndMethods[k] = api_endpoints[k];
-        printf("API ENDPOINTS and METHOD: %s\n", endpointsAndMethods[k]);
-        free(api_endpoints[k]);
+        global_endpointsAndMethods[k] = api_endpoints[k];
+        printf("API ENDPOINTS and METHOD: %s\n", global_endpointsAndMethods[k]);
     }
+    free(api_endpoints);
     free(buffer);
     fclose(serverConfigFile);
 }
-
+#pragma endregion
+#pragma region MAIN FUNC
 int main() 
 {
     int server_fd, new_socket;
@@ -157,13 +226,80 @@ int main()
         printf("Method: %s\n",method);
         char *path = strtok(NULL, " ");
         printf("Path: %s\n", path);
+        //iterate endpoints
+        int isPathRegistered = 0;
+        for(int p = 0; p < global_EndpointsAndMethodsCounter; p++)
+        {
+            printf("Global Endpoints: %s\n", global_endpointsAndMethods[p]);
+            char *registeredEndpoint = strtok(strdup(global_endpointsAndMethods[p]), ":");
+            if(registeredEndpoint == NULL)
+            {
+                perror("registeredEndpoint strdup failed");
+                exit(1);
+            }
+            clearEndpoints(registeredEndpoint, '[');
+            clearEndpoints(registeredEndpoint, ']');
+            clearEndpoints(registeredEndpoint, '\'');
+            printf("Endpoints: %s\n", registeredEndpoint);
+            printf("Request path: %s\n", path);
+            //filter out registered path with '{}'
+            char *endpointChecker = strchr(registeredEndpoint, '{');
+            if(endpointChecker != NULL)
+            {
+                //validate the parameter for resource endpoints
+                char *dup_path, *dup_endpoint;
+                size_t dup_path_len, dup_endpoint_len;
+                dup_path_len = strlen(path) + 1;
+                dup_endpoint_len = strlen(registeredEndpoint) + 1;
 
-        //check if path exists in [endpointsAndMethods]
+                dup_path = (char *)malloc(dup_path_len * sizeof(char));
+                dup_endpoint = (char *)malloc(dup_endpoint_len * sizeof(char));
+                if(dup_path == NULL || dup_endpoint == NULL)
+                {
+                    perror("memory allocation failed");
+                    exit(1);
+                }
 
+                strcpy(dup_path, path);
+                strcpy(dup_endpoint, registeredEndpoint);
+                isPathRegistered = pathValidation(dup_path,dup_endpoint);
+
+                free(dup_path);
+                free(dup_endpoint);
+                free(registeredEndpoint);
+                break;
+            }
+            //return 404 if user try to access path other than registered.
+            if(strcmp(registeredEndpoint, path) == 0)
+            {
+                isPathRegistered = 1;
+                free(registeredEndpoint);
+                break;
+            }
+            free(registeredEndpoint);
+        }
+
+        if(isPathRegistered == 0)
+        {
+            //TODO: CREATE "RESPONSE MANAGER" FUNCTION, AND RETURN THE APPROPRIATE RESPONSE, BASED ON REQUEST:
+            //EXAMPLE 1:
+            //request: /api/v1/user/id/1
+            //response: {id:1,email:'test@email.com'}
+            //EXAMPLE 2:
+            //request: /api/v1/user
+            //response: [{id:1,email:'test@email.com'},{id:2,email:'test1@email.com'},...]
+            response = "HTTP/1.1 404 OK\r\n"
+                        "Content-Type: text/plain\r\n"
+                        "Content-Length: 13\r\n"
+                        "\r\n"
+                        "404 not found";
+        }
         send(new_socket, response, strlen(response), 0);
         close(new_socket);
+        
     }
 
     perror("Accept failed");
     return 0;
 }
+#pragma endregion
