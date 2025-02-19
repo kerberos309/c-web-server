@@ -10,7 +10,39 @@
 #define PORT 55000
 char **global_endpointsAndMethods;
 int global_EndpointsAndMethodsCounter = 0;
+#pragma region RESPONSE MANAGER
+char *responseManager(char *apiPath, char *method){
+    /*DESCRIPTION
+    ->accepts path and method
+    ->run function to accomodate request based on method(e.g., POST=>create item, GET=>retrieve item)
+    ->read/create items from database(sqlite)*/
 
+    sqlite3 *db;
+    int rc;
+
+    rc = sqlite3_open("main.db", &db);
+
+    if(rc)
+    {
+        fprintf(stderr, "Can't open database: %s\n", sqlite3_errmsg(db));
+        return 1;
+    }
+
+    if(strcpy(method, "GET") == 0)
+    {
+        printf("fetchin data...");
+    }
+
+    if(strcpy(method, "POST") == 0)
+    {
+        printf("creating data...");
+    }
+
+    sqlite3_close(db);
+
+    return "sample return";
+}
+#pragma endregion
 #pragma region PATH VALIDATION
 
 int pathValidation(char *requestPath, char *registeredPath)
@@ -212,7 +244,7 @@ int main()
         perror("Listen failed");
         exit(EXIT_FAILURE);
     }
-    printf("Loading Server Configuration...");
+    printf("Loading Server Configuration...\n");
     loadServer();
     printf("Listening on port %d\n", PORT);
     
@@ -232,11 +264,13 @@ int main()
         {
             printf("Global Endpoints: %s\n", global_endpointsAndMethods[p]);
             char *registeredEndpoint = strtok(strdup(global_endpointsAndMethods[p]), ":");
+            
             if(registeredEndpoint == NULL)
             {
                 perror("registeredEndpoint strdup failed");
                 exit(1);
             }
+
             clearEndpoints(registeredEndpoint, '[');
             clearEndpoints(registeredEndpoint, ']');
             clearEndpoints(registeredEndpoint, '\'');
@@ -264,36 +298,39 @@ int main()
                 strcpy(dup_endpoint, registeredEndpoint);
                 isPathRegistered = pathValidation(dup_path,dup_endpoint);
 
+                char test[] = responseManager(path, method);
+
                 free(dup_path);
                 free(dup_endpoint);
                 free(registeredEndpoint);
                 break;
             }
-            //return 404 if user try to access path other than registered.
+            //filter out registered path without '{}'
             if(strcmp(registeredEndpoint, path) == 0)
             {
                 isPathRegistered = 1;
                 free(registeredEndpoint);
                 break;
             }
+            
             free(registeredEndpoint);
-        }
 
-        if(isPathRegistered == 0)
-        {
-            //TODO: CREATE "RESPONSE MANAGER" FUNCTION, AND RETURN THE APPROPRIATE RESPONSE, BASED ON REQUEST:
-            //EXAMPLE 1:
-            //request: /api/v1/user/id/1
-            //response: {id:1,email:'test@email.com'}
-            //EXAMPLE 2:
-            //request: /api/v1/user
-            //response: [{id:1,email:'test@email.com'},{id:2,email:'test1@email.com'},...]
-            response = "HTTP/1.1 404 OK\r\n"
-                        "Content-Type: text/plain\r\n"
-                        "Content-Length: 13\r\n"
-                        "\r\n"
-                        "404 not found";
+            if(isPathRegistered == 0)
+            {
+                response = "HTTP/1.1 404 OK\r\n"
+                            "Content-Type: text/plain\r\n"
+                            "Content-Length: 13\r\n"
+                            "\r\n"
+                            "404 not found";
+            }
         }
+        //TODO: CREATE "RESPONSE MANAGER" FUNCTION, AND RETURN THE APPROPRIATE RESPONSE, BASED ON REQUEST:
+        //EXAMPLE 1:
+        //request: /api/v1/user/id/1
+        //response: {id:1,email:'test@email.com'}
+        //EXAMPLE 2:
+        //request: /api/v1/user
+        //response: [{id:1,email:'test@email.com'},{id:2,email:'test1@email.com'},...]
         send(new_socket, response, strlen(response), 0);
         close(new_socket);
         
