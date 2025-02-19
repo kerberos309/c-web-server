@@ -19,25 +19,28 @@ char *responseManager(char *apiPath, char *method){
 
     sqlite3 *db;
     int rc;
-
+    printf("Connecting to database...\n");
     rc = sqlite3_open("main.db", &db);
 
     if(rc)
     {
         fprintf(stderr, "Can't open database: %s\n", sqlite3_errmsg(db));
-        return 1;
-    }
-
-    if(strcpy(method, "GET") == 0)
+        exit(1);
+    }else
     {
-        printf("fetchin data...");
+        printf("Connection Succes!\n");
     }
 
-    if(strcpy(method, "POST") == 0)
+    if(strcmp(method, "GET") == 0)
     {
-        printf("creating data...");
+        printf("fetchin data...\n");
     }
 
+    if(strcmp(method, "POST") == 0)
+    {
+        printf("creating data...\n");
+    }
+    printf("Closing connection to database...\n");
     sqlite3_close(db);
 
     return "sample return";
@@ -298,8 +301,6 @@ int main()
                 strcpy(dup_endpoint, registeredEndpoint);
                 isPathRegistered = pathValidation(dup_path,dup_endpoint);
 
-                char test[] = responseManager(path, method);
-
                 free(dup_path);
                 free(dup_endpoint);
                 free(registeredEndpoint);
@@ -314,23 +315,21 @@ int main()
             }
             
             free(registeredEndpoint);
-
-            if(isPathRegistered == 0)
-            {
-                response = "HTTP/1.1 404 OK\r\n"
-                            "Content-Type: text/plain\r\n"
-                            "Content-Length: 13\r\n"
-                            "\r\n"
-                            "404 not found";
-            }
         }
-        //TODO: CREATE "RESPONSE MANAGER" FUNCTION, AND RETURN THE APPROPRIATE RESPONSE, BASED ON REQUEST:
-        //EXAMPLE 1:
-        //request: /api/v1/user/id/1
-        //response: {id:1,email:'test@email.com'}
-        //EXAMPLE 2:
-        //request: /api/v1/user
-        //response: [{id:1,email:'test@email.com'},{id:2,email:'test1@email.com'},...]
+
+        if(isPathRegistered == 0)
+        {
+            response = "HTTP/1.1 404 OK\r\n"
+                        "Content-Type: text/plain\r\n"
+                        "Content-Length: 13\r\n"
+                        "\r\n"
+                        "404 not found";
+        }else
+        {
+            char *test = responseManager(path, method);
+            printf("test: %s\n", test);
+        }
+        
         send(new_socket, response, strlen(response), 0);
         close(new_socket);
         
