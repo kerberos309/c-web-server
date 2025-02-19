@@ -17,14 +17,15 @@ char *responseManager(char *apiPath, char *method){
     ->run function to accomodate request based on method(e.g., POST=>create item, GET=>retrieve item)
     ->read/create items from database(sqlite)*/
 
-    sqlite3 *db;
+    sqlite3 *database;
+    sqlite3_stmt *statement;
     int rc;
     printf("Connecting to database...\n");
-    rc = sqlite3_open("main.db", &db);
+    rc = sqlite3_open("main.db", &database);//TODO: put the database name in server.conf
 
-    if(rc)
+    if(rc != SQLITE_OK)
     {
-        fprintf(stderr, "Can't open database: %s\n", sqlite3_errmsg(db));
+        printf("Can't open database: %s\n", sqlite3_errmsg(database));
         exit(1);
     }else
     {
@@ -34,6 +35,22 @@ char *responseManager(char *apiPath, char *method){
     if(strcmp(method, "GET") == 0)
     {
         printf("fetchin data...\n");
+        const char *query = "SELECT email, username FROM users WHERE id = 1;";//TODO: get the value from apiPath
+        rc = sqlite3_prepare_v2(database, query, -1, &statement, 0);
+
+        if(rc != SQLITE_OK)
+        {
+            printf("Failed to prepare statement: %s\n", sqlite3_errmsg(database));
+            sqlite3_close(database);
+            exit(1);
+        }
+
+        while(sqlite3_step(statement) == SQLITE_ROW)
+        {
+            const char *email = (const char *)sqlite3_column_text(statement, 0);
+            const char *username = (const char *)sqlite3_column_text(statement, 1);
+            printf("users:{'email':'%s','username':'%s'}\n", email, username);
+        }
     }
 
     if(strcmp(method, "POST") == 0)
@@ -41,7 +58,8 @@ char *responseManager(char *apiPath, char *method){
         printf("creating data...\n");
     }
     printf("Closing connection to database...\n");
-    sqlite3_close(db);
+    sqlite3_finalize(statement);
+    sqlite3_close(database);
 
     return "sample return";
 }
