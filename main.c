@@ -32,9 +32,11 @@ char *responseManager(char *apiPath, char *method){
         printf("Connection Succes!\n");
     }
 
+    char *response = NULL;
+
     if(strcmp(method, "GET") == 0)
     {
-        printf("fetchin data...\n");
+        printf("fetching data...\n");
         const char *query = "SELECT email, username FROM users WHERE id = 1;";//TODO: get the value from apiPath
         rc = sqlite3_prepare_v2(database, query, -1, &statement, 0);
 
@@ -45,23 +47,53 @@ char *responseManager(char *apiPath, char *method){
             exit(1);
         }
 
+        response = malloc(256);
+        if(!response)
+        {
+            printf("Memory allocation failed\n");
+            sqlite3_finalize(statement);
+            sqlite3_close(database);
+            exit(1);
+        }
+
         while(sqlite3_step(statement) == SQLITE_ROW)
         {
             const char *email = (const char *)sqlite3_column_text(statement, 0);
             const char *username = (const char *)sqlite3_column_text(statement, 1);
-            printf("users:{'email':'%s','username':'%s'}\n", email, username);
+            snprintf(response, 256, "users:{'email':'%s','username':'%s'}", email, username);
+            // printf("users:{'email':'%s','username':'%s'}\n", email, username);
         }
     }
 
     if(strcmp(method, "POST") == 0)
     {
         printf("creating data...\n");
+        response = malloc(32);
+        if(!response)
+        {
+            printf("Memory allocation failed\n");
+            sqlite3_finalize(statement);
+            sqlite3_close(database);
+            exit(1);
+        }
+        snprintf(response, 32, "POST request received");
     }
     printf("Closing connection to database...\n");
     sqlite3_finalize(statement);
     sqlite3_close(database);
 
-    return "sample return";
+    if(!response)
+    {
+        response = malloc(16);
+        if(!response)
+        {
+            printf("Memory allocation failed\n");
+            exit(1);
+        }
+        strcpy(response, "no data");
+    }
+
+    return response;
 }
 #pragma endregion
 #pragma region PATH VALIDATION
@@ -237,12 +269,7 @@ int main()
         return 1;   
     }
 
-    const char *response =
-        "HTTP/1.1 200 OK\r\n"
-        "Content-Type: text/plain\r\n"
-        "Content-Length: 12\r\n"
-        "\r\n"
-        "Hello, World";
+    char *response = NULL;
 
     if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0)
     {
@@ -337,15 +364,39 @@ int main()
 
         if(isPathRegistered == 0)
         {
-            response = "HTTP/1.1 404 OK\r\n"
+            const char *notFound = "HTTP/1.1 404 OK\r\n"
                         "Content-Type: text/plain\r\n"
                         "Content-Length: 13\r\n"
                         "\r\n"
                         "404 not found";
+            response = malloc(strlen(notFound)+1);
+            if(!response)
+            {
+                printf("Memory allocation failed\n");
+                exit(1);
+            }else
+            {
+                strcpy(response, notFound);
+            }
         }else
         {
-            char *test = responseManager(path, method);
-            printf("test: %s\n", test);
+            char *responseData = responseManager(path, method);
+            if(responseData)
+            {
+                const char *header = "HTTP/1.1 200 OK\r\n"
+                                 "Content-Type: application/json\r\n"
+                                 "Content-Length: %zu\r\n"
+                                 "\r\n";
+                size_t contentLength = strlen(responseData);
+                size_t totalLength = strlen(header) + contentLength + 20;//additional space for Content-Length
+                response = malloc(totalLength);
+                if(response)
+                {
+                    snprintf(response, totalLength, header, contentLength);
+                    strcat(response, responseData);
+                }
+                free(responseData);
+            }
         }
         
         send(new_socket, response, strlen(response), 0);
