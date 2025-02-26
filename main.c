@@ -37,7 +37,35 @@ char *responseManager(char *apiPath, char *method){
     if(strcmp(method, "GET") == 0)
     {
         printf("fetching data...\n");
-        const char *query = "SELECT email, username FROM users WHERE id = 1;";//TODO: get the value from apiPath
+        char *slugChecker = strchr(apiPath, '{');
+        const char initialQuery[] = "SELECT email, username FROM users";//TODO: MAKE THE FIELDS AND TABLE DYNAMIC
+        size_t initialQueryLength = strlen(initialQuery);
+        char *query;
+        if(slugChecker == NULL)
+        {
+            //path is without {
+            query = malloc(initialQueryLength + sizeof(char));
+            if(!query)
+            {
+                printf("Memory allocation failed\n");
+                exit(1);
+            }
+
+            strcpy(query, initialQuery);
+        }
+        else
+        {
+            //path is with {
+            const char additionalQuery[] = " where id = 1;";
+            size_t additionalQueryLength = strlen(additionalQuery);
+            size_t totalQueryLength = initialQueryLength + additionalQueryLength + 1;//add 1 memory for null terminator
+
+            query = malloc(totalQueryLength + sizeof(char));
+
+            strcpy(query, initialQuery);
+            strcat(query, additionalQuery);
+        }
+        
         rc = sqlite3_prepare_v2(database, query, -1, &statement, 0);
 
         if(rc != SQLITE_OK)
@@ -60,7 +88,7 @@ char *responseManager(char *apiPath, char *method){
         {
             const char *email = (const char *)sqlite3_column_text(statement, 0);
             const char *username = (const char *)sqlite3_column_text(statement, 1);
-            snprintf(response, 256, "users:{'email':'%s','username':'%s'}", email, username);
+            snprintf(response, 256, "user:{'email':'%s','username':'%s'}", email, username);
             // printf("users:{'email':'%s','username':'%s'}\n", email, username);
         }
     }
