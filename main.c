@@ -11,12 +11,12 @@
 char **global_endpointsAndMethods;
 int global_EndpointsAndMethodsCounter = 0;
 #pragma region RESPONSE MANAGER
-char *responseManager(char *apiPath, char *method){
+char *responseManager(char *apiPath, char *method, char *registeredApiPath){
     /*DESCRIPTION
     ->accepts path and method
     ->run function to accomodate request based on method(e.g., POST=>create item, GET=>retrieve item)
     ->read/create items from database(sqlite)*/
-
+    printf("checking %s...\n", registeredApiPath);
     sqlite3 *database;
     sqlite3_stmt *statement;
     int rc;
@@ -37,13 +37,14 @@ char *responseManager(char *apiPath, char *method){
     if(strcmp(method, "GET") == 0)
     {
         printf("fetching data...\n");
-        char *slugChecker = strchr(apiPath, '{');
+        char *slugChecker = strchr(registeredApiPath, '{');
         const char initialQuery[] = "SELECT email, username FROM users";//TODO: MAKE THE FIELDS AND TABLE DYNAMIC
         size_t initialQueryLength = strlen(initialQuery);
         char *query;
+        printf("slugChecker: %s\n", slugChecker);
         if(slugChecker == NULL)
         {
-            //path is without {
+            printf("path is without {\n");
             query = malloc(initialQueryLength + sizeof(char));
             if(!query)
             {
@@ -52,11 +53,41 @@ char *responseManager(char *apiPath, char *method){
             }
 
             strcpy(query, initialQuery);
+
+            rc = sqlite3_prepare_v2(database, query, -1, &statement, 0);
+
+            if(rc != SQLITE_OK)
+            {
+                printf("Failed to prepare statement: %s\n", sqlite3_errmsg(database));
+                sqlite3_close(database);
+                exit(1);
+            }
+
+            response = malloc(256);
+            if(!response)
+            {
+                printf("Memory allocation failed\n");
+                sqlite3_finalize(statement);
+                sqlite3_close(database);
+                exit(1);
+            }
+
+            while(sqlite3_step(statement) == SQLITE_ROW)
+            {
+                const char *email = (const char *)sqlite3_column_text(statement, 0);
+                printf("email: %s\n", email);//TODO: STORE EMAIL IN ARRAY.
+                const char *username = (const char *)sqlite3_column_text(statement, 1);
+                snprintf(response, 256, "user:{'email':'%s','username':'%s'}", email, username);
+                // printf("users:{'email':'%s','username':'%s'}\n", email, username);
+            }
         }
         else
         {
-            //path is with {
-            const char additionalQuery[] = " where id = 1;";
+            printf("path is with {\n");
+            int slugPosition = slugChecker - registeredApiPath;
+            int slugNum = atoi(&apiPath[slugPosition]);
+            char additionalQuery[16];
+            snprintf(additionalQuery, sizeof(additionalQuery), " where id = %d;", slugNum);
             size_t additionalQueryLength = strlen(additionalQuery);
             size_t totalQueryLength = initialQueryLength + additionalQueryLength + 1;//add 1 memory for null terminator
 
@@ -64,33 +95,35 @@ char *responseManager(char *apiPath, char *method){
 
             strcpy(query, initialQuery);
             strcat(query, additionalQuery);
+
+            rc = sqlite3_prepare_v2(database, query, -1, &statement, 0);
+
+            if(rc != SQLITE_OK)
+            {
+                printf("Failed to prepare statement: %s\n", sqlite3_errmsg(database));
+                sqlite3_close(database);
+                exit(1);
+            }
+
+            response = malloc(256);
+            if(!response)
+            {
+                printf("Memory allocation failed\n");
+                sqlite3_finalize(statement);
+                sqlite3_close(database);
+                exit(1);
+            }
+
+            while(sqlite3_step(statement) == SQLITE_ROW)
+            {
+                const char *email = (const char *)sqlite3_column_text(statement, 0);
+                const char *username = (const char *)sqlite3_column_text(statement, 1);
+                snprintf(response, 256, "user:{'email':'%s','username':'%s'}", email, username);
+                // printf("users:{'email':'%s','username':'%s'}\n", email, username);
+            }
         }
         
-        rc = sqlite3_prepare_v2(database, query, -1, &statement, 0);
-
-        if(rc != SQLITE_OK)
-        {
-            printf("Failed to prepare statement: %s\n", sqlite3_errmsg(database));
-            sqlite3_close(database);
-            exit(1);
-        }
-
-        response = malloc(256);
-        if(!response)
-        {
-            printf("Memory allocation failed\n");
-            sqlite3_finalize(statement);
-            sqlite3_close(database);
-            exit(1);
-        }
-
-        while(sqlite3_step(statement) == SQLITE_ROW)
-        {
-            const char *email = (const char *)sqlite3_column_text(statement, 0);
-            const char *username = (const char *)sqlite3_column_text(statement, 1);
-            snprintf(response, 256, "user:{'email':'%s','username':'%s'}", email, username);
-            // printf("users:{'email':'%s','username':'%s'}\n", email, username);
-        }
+        
     }
 
     if(strcmp(method, "POST") == 0)
@@ -109,7 +142,7 @@ char *responseManager(char *apiPath, char *method){
     printf("Closing connection to database...\n");
     sqlite3_finalize(statement);
     sqlite3_close(database);
-
+    printf("Database is closed\n");
     if(!response)
     {
         response = malloc(16);
@@ -326,7 +359,8 @@ int main()
     
     while ((new_socket = accept(server_fd, (struct sockaddr *)&address, (socklen_t *)&addrlen)) >= 0)
     {
-        read(new_socket, buffer, 1024);
+        memset(buffer,0,sizeof(buffer));
+        read(new_socket, buffer, 1023);
         printf("Request:\n%s\n", buffer);
         char *first_line = strtok(buffer, "\n");
         printf("First Line: %s\n", first_line);
@@ -336,6 +370,7 @@ int main()
         printf("Path: %s\n", path);
         //iterate endpoints
         int isPathRegistered = 0;
+        char *registeredApiPath = NULL;
         for(int p = 0; p < global_EndpointsAndMethodsCounter; p++)
         {
             printf("Global Endpoints: %s\n", global_endpointsAndMethods[p]);
@@ -354,6 +389,7 @@ int main()
             printf("Request path: %s\n", path);
             //filter out registered path with '{}'
             char *endpointChecker = strchr(registeredEndpoint, '{');
+            
             if(endpointChecker != NULL)
             {
                 //validate the parameter for resource endpoints
@@ -374,6 +410,21 @@ int main()
                 strcpy(dup_endpoint, registeredEndpoint);
                 isPathRegistered = pathValidation(dup_path,dup_endpoint);
 
+                if(isPathRegistered != 0)
+                {
+                    printf("copying registered endpoint...\n");
+                    size_t registeredEndpointLen = strlen(registeredEndpoint) + 1;
+                    registeredApiPath = (char *)malloc(registeredEndpointLen * sizeof(char));
+                    if(registeredApiPath == NULL)
+                    {
+                        printf("memory allocation failed.\n");
+                        exit(1);
+                    }
+                    strcpy(registeredApiPath, registeredEndpoint);
+                }
+
+                
+
                 free(dup_path);
                 free(dup_endpoint);
                 free(registeredEndpoint);
@@ -383,6 +434,19 @@ int main()
             if(strcmp(registeredEndpoint, path) == 0)
             {
                 isPathRegistered = 1;
+                if(isPathRegistered != 0)
+                {
+                    printf("copying registered endpoint...\n");
+                    size_t registeredEndpointLen = strlen(registeredEndpoint) + 1;
+                    registeredApiPath = (char *)malloc(registeredEndpointLen * sizeof(char));
+                    if(registeredApiPath == NULL)
+                    {
+                        printf("memory allocation failed.\n");
+                        exit(1);
+                    }
+                    strcpy(registeredApiPath, registeredEndpoint);
+                }
+
                 free(registeredEndpoint);
                 break;
             }
@@ -408,7 +472,13 @@ int main()
             }
         }else
         {
-            char *responseData = responseManager(path, method);
+            if(registeredApiPath == NULL)
+            {
+                printf("Memory Allocation Failed.\n");
+                exit(1);
+            }
+            char *responseData = responseManager(path, method, registeredApiPath);
+            free(registeredApiPath); 
             if(responseData)
             {
                 const char *header = "HTTP/1.1 200 OK\r\n"
