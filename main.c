@@ -17,6 +17,10 @@ char *responseManager(char *apiPath, char *method, char *registeredApiPath){
     ->run function to accomodate request based on method(e.g., POST=>create item, GET=>retrieve item)
     ->read/create items from database(sqlite)*/
     printf("checking %s...\n", registeredApiPath);
+    char **emails;
+    int step_mem_size = 0;
+    int step_counter = 0;
+
     sqlite3 *database;
     sqlite3_stmt *statement;
     int rc;
@@ -71,15 +75,74 @@ char *responseManager(char *apiPath, char *method, char *registeredApiPath){
                 sqlite3_close(database);
                 exit(1);
             }
+            //read how many rows are affected
+            while(sqlite3_step(statement) == SQLITE_ROW)
+            {
+                step_mem_size++;
+                // const char *email = (const char *)sqlite3_column_text(statement, 0);
+                // const char *username = (const char *)sqlite3_column_text(statement, 1);
+                // snprintf(response, 256, "user:{'email':'%s','username':'%s'}", email, username);
+            }
 
+            //assign memory to [emails]
+            emails = malloc(step_mem_size * sizeof(char *));
+
+            //validate
+            if(!emails)
+            {
+                printf("Memory allocation failed\n");
+                sqlite3_finalize(statement);
+                sqlite3_close(database);
+                exit(1);
+            }
+
+            //
+            //assign char array
             while(sqlite3_step(statement) == SQLITE_ROW)
             {
                 const char *email = (const char *)sqlite3_column_text(statement, 0);
-                printf("email: %s\n", email);//TODO: STORE EMAIL IN ARRAY.
-                const char *username = (const char *)sqlite3_column_text(statement, 1);
-                snprintf(response, 256, "user:{'email':'%s','username':'%s'}", email, username);
-                // printf("users:{'email':'%s','username':'%s'}\n", email, username);
+                size_t email_size = strlen(email) + 1;
+                emails[step_counter] = (char *)malloc(email_size * sizeof(char *));
+                if(!emails[step_counter])
+                {
+                    printf("Memory allocation failed\n");
+                    sqlite3_finalize(statement);
+                    sqlite3_close(database);
+                    exit(1);
+                }
+
+                strcpy(emails[step_counter], email);
+                step_counter++;
             }
+
+            char *email_concat;
+            //get total size of email char array
+            size_t email_total_size = 0;
+            for(int i = 0; i < step_counter; i++)
+            {
+                email_total_size = email_total_size + strlen(emails[i]);
+            }
+
+            //assign the size to [email_concat]
+            email_concat = (char *)malloc(email_total_size * sizeof(char *));
+
+            //concat [emails] to [email_concat]
+            email_concat[0] = '\0'; 
+            for(int i = 0; i < step_counter; i++)
+            {
+                strcat(email_concat, emails[i]);
+            }
+
+            //display [email_concat]
+            snprintf(response, email_total_size, "user:{'email':'%s'}", email_concat);//TODO: FIX DISPLAY OF EMAILS
+
+            //free memory
+            free(email_concat);
+            for(int i = 0; i < step_counter; i++)
+            {
+                free(emails[i]);
+            }
+            free(emails);
         }
         else
         {
