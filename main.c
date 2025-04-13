@@ -11,7 +11,7 @@
 char **global_endpointsAndMethods;
 int global_EndpointsAndMethodsCounter = 0;
 #pragma region RESPONSE MANAGER
-char *responseManager(char *apiPath, char *method, char *registeredApiPath){
+char *responseManager(const char *apiPath, const char *method, char *registeredApiPath){
     /*DESCRIPTION
     ->accepts path and method
     ->run function to accomodate request based on method(e.g., POST=>create item, GET=>retrieve item)
@@ -112,7 +112,8 @@ char *responseManager(char *apiPath, char *method, char *registeredApiPath){
             {
                 email_total_size = email_total_size + strlen(emails[i]);
             }
-
+            //add 1 to [email_total_size]
+            email_total_size += 1;    
             //assign the size to [email_concat]
             email_concat = (char *)malloc(email_total_size * sizeof(char));
 
@@ -127,6 +128,7 @@ char *responseManager(char *apiPath, char *method, char *registeredApiPath){
             snprintf(response, 256, "user:{'email':'%s'}", email_concat);//TODO: FIX DISPLAY OF EMAILS
 
             //free memory
+            free(query);
             free(email_concat);
             for(int i = 0; i < step_counter; i++)
             {
