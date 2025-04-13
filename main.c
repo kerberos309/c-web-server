@@ -18,7 +18,6 @@ char *responseManager(char *apiPath, char *method, char *registeredApiPath){
     ->read/create items from database(sqlite)*/
     printf("checking %s...\n", registeredApiPath);
     char **emails;
-    int step_mem_size = 0;
     int step_counter = 0;
 
     sqlite3 *database;
@@ -75,17 +74,8 @@ char *responseManager(char *apiPath, char *method, char *registeredApiPath){
                 sqlite3_close(database);
                 exit(1);
             }
-            //read how many rows are affected
-            while(sqlite3_step(statement) == SQLITE_ROW)
-            {
-                step_mem_size++;
-                // const char *email = (const char *)sqlite3_column_text(statement, 0);
-                // const char *username = (const char *)sqlite3_column_text(statement, 1);
-                // snprintf(response, 256, "user:{'email':'%s','username':'%s'}", email, username);
-            }
-
             //assign memory to [emails]
-            emails = malloc(step_mem_size * sizeof(char *));
+            emails = malloc(256 * sizeof(char *));
 
             //validate
             if(!emails)
@@ -102,7 +92,7 @@ char *responseManager(char *apiPath, char *method, char *registeredApiPath){
             {
                 const char *email = (const char *)sqlite3_column_text(statement, 0);
                 size_t email_size = strlen(email) + 1;
-                emails[step_counter] = (char *)malloc(email_size * sizeof(char *));
+                emails[step_counter] = (char *)malloc(email_size * sizeof(char));
                 if(!emails[step_counter])
                 {
                     printf("Memory allocation failed\n");
@@ -124,7 +114,7 @@ char *responseManager(char *apiPath, char *method, char *registeredApiPath){
             }
 
             //assign the size to [email_concat]
-            email_concat = (char *)malloc(email_total_size * sizeof(char *));
+            email_concat = (char *)malloc(email_total_size * sizeof(char));
 
             //concat [emails] to [email_concat]
             email_concat[0] = '\0'; 
@@ -134,7 +124,7 @@ char *responseManager(char *apiPath, char *method, char *registeredApiPath){
             }
 
             //display [email_concat]
-            snprintf(response, email_total_size, "user:{'email':'%s'}", email_concat);//TODO: FIX DISPLAY OF EMAILS
+            snprintf(response, 256, "user:{'email':'%s'}", email_concat);//TODO: FIX DISPLAY OF EMAILS
 
             //free memory
             free(email_concat);
