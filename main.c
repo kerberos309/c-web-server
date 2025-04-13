@@ -299,10 +299,10 @@ void loadServer()
     }
 
     fseek(serverConfigFile, 0, SEEK_END);
-    long fileSize = ftell(serverConfigFile);
+    long fileSize = ftell(serverConfigFile) + 1;
     rewind(serverConfigFile);
 
-    char *buffer = (char *)malloc(fileSize + 1);
+    char *buffer = malloc(fileSize * sizeof(char));
     if(!buffer)
     {
         perror("Memory allocation failed.");
@@ -351,7 +351,7 @@ void loadServer()
     //set the total count of endpoints to global variable
     global_EndpointsAndMethodsCounter = counter;
     //initiate size of "endpoints"
-    global_endpointsAndMethods = (char **)malloc(endpoints_count * sizeof(char *));
+    global_endpointsAndMethods = malloc(endpoints_count * sizeof(char *));
     if(global_endpointsAndMethods == NULL)
     {
         perror("global_endpointsAndMethods malloc failed.");
@@ -453,8 +453,8 @@ int main()
                 dup_path_len = strlen(path) + 1;
                 dup_endpoint_len = strlen(registeredEndpoint) + 1;
 
-                dup_path = (char *)malloc(dup_path_len * sizeof(char));
-                dup_endpoint = (char *)malloc(dup_endpoint_len * sizeof(char));
+                dup_path = malloc(dup_path_len * sizeof(char));
+                dup_endpoint = malloc(dup_endpoint_len * sizeof(char));
                 if(dup_path == NULL || dup_endpoint == NULL)
                 {
                     perror("memory allocation failed");
@@ -469,7 +469,7 @@ int main()
                 {
                     printf("copying registered endpoint...\n");
                     size_t registeredEndpointLen = strlen(registeredEndpoint) + 1;
-                    registeredApiPath = (char *)malloc(registeredEndpointLen * sizeof(char));
+                    registeredApiPath = malloc(registeredEndpointLen * sizeof(char));
                     if(registeredApiPath == NULL)
                     {
                         printf("memory allocation failed.\n");
@@ -493,7 +493,7 @@ int main()
                 {
                     printf("copying registered endpoint...\n");
                     size_t registeredEndpointLen = strlen(registeredEndpoint) + 1;
-                    registeredApiPath = (char *)malloc(registeredEndpointLen * sizeof(char));
+                    registeredApiPath = malloc(registeredEndpointLen * sizeof(char));
                     if(registeredApiPath == NULL)
                     {
                         printf("memory allocation failed.\n");
@@ -516,7 +516,8 @@ int main()
                         "Content-Length: 13\r\n"
                         "\r\n"
                         "404 not found";
-            response = malloc(strlen(notFound)+1);
+            size_t notFoundLen = strlen(notFound) + 1;
+            response = malloc(notFoundLen * sizeof(char));
             if(!response)
             {
                 printf("Memory allocation failed\n");
@@ -542,7 +543,7 @@ int main()
                                  "\r\n";
                 size_t contentLength = strlen(responseData);
                 size_t totalLength = strlen(header) + contentLength + 20;//additional space for Content-Length
-                response = malloc(totalLength);
+                response = malloc(totalLength * sizeof(char));
                 if(response)
                 {
                     snprintf(response, totalLength, header, contentLength);
