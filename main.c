@@ -160,17 +160,16 @@ char *responseManager(const char *apiPath, const char *method, char *registeredA
                 exit(1);
             }
 
-            response = malloc(256);
-            if(!response)
-            {
-                printf("Memory allocation failed\n");
-                sqlite3_finalize(statement);
-                sqlite3_close(database);
-                exit(1);
-            }
-
             while(sqlite3_step(statement) == SQLITE_ROW)
             {
+                response = malloc(256);
+                if(!response)
+                {
+                    printf("Memory allocation failed\n");
+                    sqlite3_finalize(statement);
+                    sqlite3_close(database);
+                    exit(1);
+                }
                 const char *email = (const char *)sqlite3_column_text(statement, 0);
                 const char *username = (const char *)sqlite3_column_text(statement, 1);
                 snprintf(response, 256, "user:{'email':'%s','username':'%s'}", email, username);
