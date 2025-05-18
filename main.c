@@ -219,6 +219,7 @@ int pathValidation(char *requestPath, char *registeredPath)
     DESCRIPTION:
     ->TO VALIDATE THE REGISTERED PATH FROM CONFIG FILE AND REQUEST PATH
     */
+
     char *charPosition = strchr(registeredPath, '{');
     //TODO: IDENTIFY MULTIPLE SLUGS, AND CONFIRM IF IT IS STRING(CHAR[]) OR INT
     if(charPosition != NULL)
@@ -226,12 +227,23 @@ int pathValidation(char *requestPath, char *registeredPath)
         int position = charPosition - registeredPath;
         printf("position int: %d\n", position);
         printf("whole path: %s\n", requestPath);
-        printf("value: %c\n", requestPath[position]);
-        if(isdigit(requestPath[position])){
-            printf("Valid\n");
-            return 1;
-        }else{
-            printf("Invalid\n");
+        if(position < strlen(requestPath))
+        {
+            printf("value: %c\n", requestPath[position]);
+            if(isdigit(requestPath[position]))
+            {
+                printf("Valid\n");
+                return 1;
+            }
+            else
+            {
+                printf("Invalid\n");
+                return 0;
+            }
+        }
+        else
+        {
+            printf("Error: position %d out of bounds for requestPath \"%s\"\n", position, requestPath);
             return 0;
         }
     }
@@ -277,6 +289,7 @@ void exitServer(int sig)
 void clearEndpoints(char *str, char ch)
 {
     int i, j = 0;
+
     int length = strlen(str);
 
     for (i = 0; i < length; i++) {
@@ -298,10 +311,10 @@ void loadServer()
     }
 
     fseek(serverConfigFile, 0, SEEK_END);
-    long fileSize = ftell(serverConfigFile) + 1;
+    long fileSize = ftell(serverConfigFile);
     rewind(serverConfigFile);
 
-    char *buffer = malloc(fileSize * sizeof(char));
+    char *buffer = malloc((fileSize + 1) * sizeof(char));
     if(!buffer)
     {
         perror("Memory allocation failed.");
@@ -309,8 +322,8 @@ void loadServer()
         exit(1);
     }
 
-    fread(buffer, 1, fileSize, serverConfigFile);
-    buffer[fileSize] = '\0';
+    size_t bytesRead = fread(buffer, 1, fileSize, serverConfigFile);
+    buffer[bytesRead] = '\0';
 
     printf("%s\n", buffer);
     char *route = strtok(buffer, "=");
@@ -334,16 +347,26 @@ void loadServer()
         printf("Memory allocation failed.");
         exit(1);        
     }
-    char *route_value = strtok(strdup(path_array), ",");
+    char *path_array_copy = malloc((strlen(path_array) + 1) * sizeof(char));
+    if(!path_array_copy)
+    {
+        printf("Memory allocation failed!");
+        exit(1);
+    }
+    strcpy(path_array_copy, path_array);
+    char *route_value = strtok(path_array_copy, ",");
     int counter = 0;
     while(route_value != NULL)
     {
-        api_endpoints[counter] = strdup(route_value);
+        printf("route_value: %s\n", route_value);
+        api_endpoints[counter] = malloc((strlen(route_value) + 1) * sizeof(char));
         if(api_endpoints[counter]==NULL)
         {
             perror("api_endpoints strdup failed");
             exit(1);
         }
+        //assign value of route_value to api_endpoints[counter]
+        strcpy(api_endpoints[counter], route_value);
         counter++;
         route_value = strtok(NULL,",");
     }
@@ -359,12 +382,39 @@ void loadServer()
     //display endpoints
     for (int k = 0; k < endpoints_count; k++)
     {
-        //clear endpoints
-        clearEndpoints(api_endpoints[k], '"');
-        //store api endpoints into char[][]
-        global_endpointsAndMethods[k] = api_endpoints[k];
-        printf("API ENDPOINTS and METHOD: %s\n", global_endpointsAndMethods[k]);
+        if(api_endpoints[k])
+        {
+            //initialize api_endpoints[k]
+            size_t api_endpoints_size = strlen(api_endpoints[k]) + 1;
+            char *str = malloc(api_endpoints_size * sizeof(char));
+            if(!str)
+            {
+                printf("Memory allocation failed!");
+                exit(1);
+            }
+            //copy api_endpoints[k] to str
+            strcpy(str, api_endpoints[k]);
+            //clear endpoints
+            clearEndpoints(str, '"');
+            //initialize global_endpointsAndMethods[k]
+            global_endpointsAndMethods[k] = malloc((strlen(str)+1)*sizeof(char));
+            if(!global_endpointsAndMethods[k])
+            {
+                printf("Memory allocation failed!");
+                exit(1);
+            }
+            //copy str to global_endpointsAndMethods[k]
+            strcpy(global_endpointsAndMethods[k], str);
+            //free str
+            free(str);
+            printf("API ENDPOINTS and METHOD: %s\n", global_endpointsAndMethods[k]);
+        }
     }
+    for(int j = 0; j < endpoints_count; j++)
+    {
+        free(api_endpoints[j]);
+    }
+    free(path_array_copy);
     free(api_endpoints);
     free(buffer);
     fclose(serverConfigFile);
